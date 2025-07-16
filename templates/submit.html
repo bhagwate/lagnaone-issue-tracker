@@ -3,115 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LagnaOne Issue Tracker</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <title>Submit an Issue - LagnaOne</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f0f2f5;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .form-container {
-            background-color: #ffffff;
-            padding: 3rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            max-width: 600px;
-            width: 100%;
-        }
-        .form-container h1 {
-            color: #333;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            text-align: center;
-        }
-        .form-container p {
-            color: #666;
-            margin-bottom: 2rem;
-            text-align: center;
-        }
-        .form-label {
-            font-weight: 500;
-            color: #555;
-        }
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 1px solid #ddd;
-            padding: 0.75rem 1rem;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-        }
-        .btn-primary {
-            background-color: #0d6efd;
-            border: none;
-            border-radius: 8px;
-            padding: 0.85rem;
-            font-weight: 500;
-            width: 100%;
-            transition: background-color 0.3s ease;
-        }
-        .btn-primary:hover {
-            background-color: #0b5ed7;
-        }
-        .alert {
-            border-radius: 8px;
-        }
+        body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
-<body>
-    <div class="form-container">
-        <h1>LagnaOne Issue Tracker</h1>
-        <p>We value your feedback. Please use the form below to report issues or suggest new features.</p>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
+<body class="bg-slate-50">
+    <div class="container mx-auto max-w-2xl my-10 md:my-20">
+        <div class="bg-white p-8 rounded-2xl shadow-lg">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-slate-900">LagnaOne Issue Tracker</h1>
+                <p class="text-slate-500 mt-2">We appreciate your help in making our service better.</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }}" role="alert">
-                        {{ message }}
-                    </div>
+                  <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg" role="alert">
+                    {{ message }}
+                  </div>
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <form method="POST" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="name" class="form-label">Your Name</label>
-                <input type="text" class="form-control" id="name" name="name" required>
-            </div>
-            <div class="mb-3">
-                <label for="email" class="form-label">Your Email</label>
-                <input type="email" class="form-control" id="email" name="email" required>
-            </div>
-            <div class="mb-3">
-                <label for="type" class="form-label">Type of Submission</label>
-                <select class="form-select" id="type" name="type" required>
-                    <option value="Issues and Bugs">Issues and Bugs</option>
-                    <option value="New Feature Request">New Feature Request</option>
-                    <option value="Feedback and Suggestions">Feedback and Suggestions</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label for="details" class="form-label">Details</label>
-                <textarea class="form-control" id="details" name="details" rows="5" required></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="screenshot" class="form-label">Screenshot (Optional, PNG/JPG/JPEG, max 2MB)</label>
-                <input type="file" class="form-control" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg">
-            </div>
-            <div class="mb-3">
-                <label for="captcha_answer" class="form-label">Security Check: {{ captcha_question }}</label>
-                <input type="number" class="form-control" id="captcha_answer" name="captcha_answer" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Submit Issue</button>
-        </form>
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" enctype="multipart/form-data">
+                <div class="space-y-6">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-slate-700">Your Name</label>
+                        <input type="text" id="name" name="name" required class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-slate-700">Your Email</label>
+                        <input type="email" id="email" name="email" required class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="type" class="block text-sm font-medium text-slate-700">Type of Submission</label>
+                        <select id="type" name="type" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <option>Issues and Bugs</option>
+                            <option>New Feature Request</option>
+                            <option>Feedback and Suggestions</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="details" class="block text-sm font-medium text-slate-700">Details</label>
+                        <textarea id="details" name="details" rows="5" required class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                    </div>
+                    <div>
+                        <label for="screenshot" class="block text-sm font-medium text-slate-700">Screenshot (Optional)</label>
+                        <input type="file" id="screenshot" name="screenshot" accept="image/*" class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    </div>
+                </div>
+                <div class="mt-8">
+                    <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Submit Issue
+                    </button>
+                </div>
+            </form>
+        </div>
+        <div class="text-center mt-4">
+            <a href="{{ url_for('admin') }}" class="text-sm text-slate-500 hover:underline">Admin Login</a>
+        </div>
     </div>
 </body>
 </html>
