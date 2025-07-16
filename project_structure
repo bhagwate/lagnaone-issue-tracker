@@ -1,0 +1,13 @@
+lagnaone-issue-tracker/
+├── app.py
+├── templates/
+│   ├── submit.html
+│   ├── login.html
+│   ├── dashboard.html
+├── uploads/ (empty, will be created on run)
+├── requirements.txt
+├── README.md
+├── .gitignore
+
+
+
