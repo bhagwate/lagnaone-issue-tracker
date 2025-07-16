@@ -17,6 +17,16 @@
             height: 300px;
             width: 100%;
         }
+        .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .modal-body img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -24,6 +34,23 @@
     <div id="app" class="container mx-auto p-4 md:p-8 max-w-7xl">
         <!-- App content will be rendered here by JavaScript -->
     </div>
+
+    <!-- Details Modal -->
+    <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+            <div class="flex justify-between items-center p-6 border-b border-slate-200">
+                <h3 id="modal-title" class="text-xl font-bold">Issue Details</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">&times;</button>
+            </div>
+            <div id="modal-body" class="p-6 modal-body">
+                <!-- Modal content will be injected here -->
+            </div>
+            <div class="p-6 bg-slate-50 rounded-b-2xl text-right">
+                 <a id="modal-github-link" href="#" target="_blank" class="inline-block px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">View on GitHub</a>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         // --- CONFIGURATION ---
@@ -35,6 +62,7 @@
 
         // --- APPLICATION STATE & ROUTING ---
         const app = document.getElementById('app');
+        const modal = document.getElementById('details-modal');
         let charts = {}; // To hold chart instances
 
         // Simple router to show different views
@@ -90,6 +118,14 @@
                                 <label for="details" class="block text-sm font-medium text-slate-700">Details</label>
                                 <textarea id="details" rows="5" required class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
                             </div>
+                            <div>
+                                <label for="screenshot" class="block text-sm font-medium text-slate-700">Screenshot (Optional)</label>
+                                <input type="file" id="screenshot" accept="image/*" class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                                <p class="mt-2 text-xs text-slate-500">Select an image to preview it. You will drag & drop it onto the GitHub page to attach it.</p>
+                            </div>
+                            <div id="preview-container" class="mt-4">
+                                <img id="screenshot-preview" class="hidden max-w-full rounded-lg border border-slate-200" />
+                            </div>
                         </div>
                         <div class="mt-6">
                             <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -103,6 +139,7 @@
                 </div>
             `;
             document.getElementById('issue-form').addEventListener('submit', handleIssueSubmit);
+            document.getElementById('screenshot').addEventListener('change', handleFileSelect);
         }
 
         // View 2: Admin Login
@@ -144,7 +181,6 @@
                 }
                 const issues = await response.json();
                 
-                // Filter out pull requests, which are also considered "issues"
                 const actualIssues = issues.filter(issue => !issue.pull_request);
 
                 app.innerHTML = `
@@ -154,19 +190,13 @@
                             <a href="#" onclick="logout()" class="text-sm font-medium text-indigo-600 hover:underline">Logout</a>
                         </div>
                     </nav>
-
-                    <!-- Stats & Charts -->
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                         <div class="bg-white p-6 rounded-xl shadow"><div class="chart-container"><canvas id="typeChart"></canvas></div></div>
                         <div class="bg-white p-6 rounded-xl shadow"><div class="chart-container"><canvas id="statusChart"></canvas></div></div>
                         <div class="bg-white p-6 rounded-xl shadow"><div class="chart-container"><canvas id="dailyTrendChart"></canvas></div></div>
                     </div>
-
-                    <!-- Issues Table -->
                     <div class="bg-white rounded-xl shadow overflow-hidden">
-                        <div class="p-6">
-                            <h2 class="text-xl font-semibold">All Issues</h2>
-                        </div>
+                        <div class="p-6"><h2 class="text-xl font-semibold">All Issues</h2></div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm text-left">
                                 <thead class="bg-slate-50 border-b border-slate-200">
@@ -179,9 +209,7 @@
                                         <th class="px-6 py-3 font-medium">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody id="issues-table-body">
-                                    <!-- Issues will be rendered here -->
-                                </tbody>
+                                <tbody id="issues-table-body"></tbody>
                             </table>
                         </div>
                     </div>
@@ -196,6 +224,19 @@
 
         // --- DATA HANDLING & RENDERING ---
 
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                const preview = document.getElementById('screenshot-preview');
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
         function handleIssueSubmit(event) {
             event.preventDefault();
             const name = document.getElementById('name').value;
@@ -204,16 +245,9 @@
             const details = document.getElementById('details').value;
 
             const title = encodeURIComponent(`${type}: Submitted by ${name}`);
-            const body = encodeURIComponent(
-                `**Submitter:** ${name}\n` +
-                `**Email:** ${email}\n\n` +
-                `--- \n\n` +
-                `**Details:**\n${details}`
-            );
+            const body = encodeURIComponent(`**Submitter:** ${name}\n**Email:** ${email}\n\n---\n\n**Details:**\n${details}`);
             
             const newIssueURL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/issues/new?title=${title}&body=${body}`;
-            
-            // Open the GitHub new issue page in a new tab
             window.open(newIssueURL, '_blank');
         }
 
@@ -230,7 +264,7 @@
         
         function logout() {
             sessionStorage.removeItem('isAdminAuthenticated');
-            window.location.hash = ''; // Go back to home
+            window.location.hash = '';
         }
 
         function renderIssuesTable(issues) {
@@ -244,21 +278,40 @@
                     <td class="px-6 py-4 font-semibold text-indigo-600">#${issue.number}</td>
                     <td class="px-6 py-4 font-medium text-slate-900">${issue.title}</td>
                     <td class="px-6 py-4">
-                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${issue.state === 'open' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                            ${issue.state}
-                        </span>
+                        <span class="px-2 py-1 text-xs font-semibold rounded-full ${issue.state === 'open' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${issue.state}</span>
                     </td>
                     <td class="px-6 py-4 text-slate-600">${issue.user.login}</td>
                     <td class="px-6 py-4 text-slate-600">${new Date(issue.created_at).toLocaleDateString()}</td>
                     <td class="px-6 py-4">
-                        <a href="${issue.html_url}" target="_blank" class="font-medium text-indigo-600 hover:underline">View on GitHub</a>
+                        <button onclick="showIssueDetails(${issue.number})" class="font-medium text-indigo-600 hover:underline">View Details</button>
                     </td>
                 </tr>
             `).join('');
         }
 
+        async function showIssueDetails(issueNumber) {
+            const modalBody = document.getElementById('modal-body');
+            modalBody.innerHTML = '<p>Loading issue details...</p>';
+            modal.style.display = 'flex';
+            
+            try {
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issueNumber}`);
+                if (!response.ok) throw new Error('Failed to fetch issue.');
+                const issue = await response.json();
+
+                document.getElementById('modal-title').innerText = `Issue #${issue.number}: ${issue.title}`;
+                document.getElementById('modal-github-link').href = issue.html_url;
+                modalBody.innerHTML = marked.parse(issue.body);
+            } catch (error) {
+                modalBody.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            }
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+
         function renderCharts(issues) {
-            // Chart 1: Issues by Type (from labels)
             const typeCounts = issues.reduce((acc, issue) => {
                 const typeLabel = issue.labels.find(l => ['Issues and Bugs', 'New Feature Request', 'Feedback and Suggestions'].includes(l.name));
                 const type = typeLabel ? typeLabel.name : 'Uncategorized';
@@ -274,7 +327,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Issues by Type' } } }
             });
 
-            // Chart 2: Issues by Status (Open vs. Closed)
             const statusCounts = issues.reduce((acc, issue) => {
                 acc[issue.state] = (acc[issue.state] || 0) + 1;
                 return acc;
@@ -288,7 +340,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Issues by Status' } } }
             });
 
-            // Chart 3: Daily Submission Trend
             const dailyCounts = issues.reduce((acc, issue) => {
                 const date = new Date(issue.created_at).toISOString().split('T')[0];
                 acc[date] = (acc[date] || 0) + 1;
