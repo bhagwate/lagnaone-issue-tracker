@@ -2,216 +2,141 @@ import os
 import sqlite3
 import datetime
 import hashlib
-from flask import Flask, request, render_template, redirect, url_for, session, flash, send_from_directory
+from flask import Flask, request, render_template, redirect, url_for, session, flash, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from datetime import datetime, timezone, timedelta
 import random
 import json
 
-app =Flask(__name__)
-app.secret_key = 'lagnaone_secret_key'  # Replace with a secure key in production
+# --- Basic Setup ---
+app = Flask(__name__)
+app.secret_key = 'a_very_secret_key_for_lagnaone' # Change this in a real application
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max file size
+app.config['DATABASE'] = 'lagnaone_issues.db'
 
-# Ensure upload folder exists
+# Ensure the upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Database setup
+# --- Database Helper Functions ---
+def get_db():
+    conn = sqlite3.connect(app.config['DATABASE'])
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def init_db():
-    conn = sqlite3.connect('lagnaone_issues.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS issues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        type TEXT NOT NULL,
-        details TEXT NOT NULL,
-        screenshot TEXT,
-        status TEXT NOT NULL DEFAULT 'Open',
-        created_at TIMESTAMP NOT NULL
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_limit (
-        date TEXT PRIMARY KEY,
-        count INTEGER NOT NULL DEFAULT 0
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS admin_config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-    )''')
-    # Set default daily limit and admin password if not set
-    c.execute("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('daily_limit', '50')")
-    c.execute("INSERT OR IGNORE INTO admin_config (key, value) VALUES ('admin_password', ?)",
-              (hashlib.sha256('admin123'.encode()).hexdigest(),))  # Default password: admin123
-    conn.commit()
-    conn.close()
+    with app.app_context():
+        db = get_db()
+        with app.open_resource('schema.sql', mode='r') as f:
+            db.cursor().executescript(f.read())
+        db.commit()
 
-init_db()
+# --- Application Routes ---
 
-# IST timezone
-IST = timezone(timedelta(hours=5, minutes=30))
-
-# Helper to get current IST date
-def get_ist_date():
-    return datetime.now(IST).strftime('%Y-%m-%d')
-
-# Check and reset daily limit
-def check_daily_limit():
-    conn = sqlite3.connect('lagnaone_issues.db')
-    c = conn.cursor()
-    today = get_ist_date()
-    c.execute("SELECT count FROM daily_limit WHERE date = ?", (today,))
-    result = c.fetchone()
-    c.execute("SELECT value FROM admin_config WHERE key = 'daily_limit'")
-    daily_limit = int(c.fetchone()[0])
-    if not result:
-        c.execute("INSERT INTO daily_limit (date, count) VALUES (?, 0)", (today,))
-        count = 0
-    else:
-        count = result[0]
-    # Reset old dates
-    c.execute("DELETE FROM daily_limit WHERE date != ?", (today,))
-    conn.commit()
-    conn.close()
-    return count < daily_limit, count, daily_limit
-
-# User form route
 @app.route('/', methods=['GET', 'POST'])
 def submit_issue():
+    """Renders the submission form and handles new issue submissions."""
     if request.method == 'POST':
-        can_submit, count, daily_limit = check_daily_limit()
-        if not can_submit:
-            flash(f'Daily submission limit of {daily_limit} reached. Try again tomorrow.', 'error')
-            return redirect(url_for('submit_issue'))
-
         name = request.form['name']
         email = request.form['email']
         issue_type = request.form['type']
         details = request.form['details']
-        captcha_answer = request.form['captcha_answer']
-        captcha_solution = session.get('captcha_solution')
 
-        if not captcha_answer or int(captcha_answer) != captcha_solution:
-            flash('Invalid CAPTCHA answer.', 'error')
-            return redirect(url_for('submit_issue'))
-
-        # --- MODIFICATION START ---
-        screenshot_filename = None  # Initialize as None
+        screenshot_filename = None
         if 'screenshot' in request.files:
             file = request.files['screenshot']
             if file and file.filename:
-                filename = secure_filename(file.filename)
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    # Save the file to the uploads folder
-                    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    file.save(save_path)
-                    # Store only the filename in the database
-                    screenshot_filename = filename
-                else:
-                    flash('Invalid file format. Only PNG, JPG, JPEG allowed.', 'error')
-                    return redirect(url_for('submit_issue'))
+                # Secure the filename and save the file
+                filename = secure_filename(f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{file.filename}")
+                save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(save_path)
+                screenshot_filename = filename
 
-        conn = sqlite3.connect('lagnaone_issues.db')
-        c = conn.cursor()
-        # Use screenshot_filename instead of the full path
-        c.execute("INSERT INTO issues (name, email, type, details, screenshot, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                  (name, email, issue_type, details, screenshot_filename, datetime.now(IST)))
-        # --- MODIFICATION END ---
-        c.execute("UPDATE daily_limit SET count = count + 1 WHERE date = ?", (get_ist_date(),))
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO issues (name, email, type, details, screenshot) VALUES (?, ?, ?, ?, ?)',
+            (name, email, issue_type, details, screenshot_filename)
+        )
         conn.commit()
         conn.close()
-        flash('Issue submitted successfully!', 'success')
+        
+        flash('Your issue has been submitted successfully!', 'success')
         return redirect(url_for('submit_issue'))
 
-    # Generate CAPTCHA
-    num1 = random.randint(1, 10)
-    num2 = random.randint(1, 10)
-    session['captcha_solution'] = num1 + num2
-    captcha_question = f"What is {num1} + {num2}?"
-    return render_template('submit.html', captcha_question=captcha_question)
+    return render_template('submit.html')
 
-# Admin login
-@app.route('/admin/login', methods=['GET', 'POST'])
-def admin_login():
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
+    """Handles admin login and displays the dashboard."""
     if request.method == 'POST':
-        password = request.form['password']
-        conn = sqlite3.connect('lagnaone_issues.db')
-        c = conn.cursor()
-        c.execute("SELECT value FROM admin_config WHERE key = 'admin_password'")
-        stored_password = c.fetchone()[0]
-        conn.close()
-        if hashlib.sha256(password.encode()).hexdigest() == stored_password:
-            session['admin'] = True
-            return redirect(url_for('admin_dashboard'))
-        flash('Invalid password.', 'error')
-    return render_template('login.html')
+        # This is a very basic password check.
+        if request.form['password'] == 'admin123':
+            session['logged_in'] = True
+            return redirect(url_for('admin'))
+        else:
+            flash('Incorrect password.', 'danger')
 
-# Admin dashboard
-@app.route('/admin/dashboard')
-def admin_dashboard():
-    if not session.get('admin'):
-        return redirect(url_for('admin_login'))
+    if not session.get('logged_in'):
+        return render_template('login.html')
 
-    conn = sqlite3.connect('lagnaone_issues.db')
-    c = conn.cursor()
-    c.execute("SELECT id, name, email, type, details, screenshot, status, created_at FROM issues ORDER BY created_at DESC")
-    issues = c.fetchall()
-    c.execute("SELECT value FROM admin_config WHERE key = 'daily_limit'")
-    daily_limit = c.fetchone()[0]
-    
-    # Data for graphs
-    c.execute("SELECT type, COUNT(*) FROM issues GROUP BY type")
-    type_data = c.fetchall()
-    c.execute("SELECT status, COUNT(*) FROM issues GROUP BY status")
-    status_data = c.fetchall()
-    c.execute("SELECT strftime('%Y-%m-%d', created_at, 'localtime') as date, COUNT(*) FROM issues GROUP BY date ORDER BY date")
-    daily_trend = c.fetchall()
-    
-    # Average time to close
-    c.execute("SELECT AVG(strftime('%s', created_at, 'localtime') - strftime('%s', (SELECT created_at FROM issues i2 WHERE i2.id < i1.id AND i2.status = 'Closed' ORDER BY i2.created_at DESC LIMIT 1))) FROM issues i1 WHERE status = 'Closed'")
-    avg_close_time = c.fetchone()[0]
-    avg_close_time = round(avg_close_time / 86400, 2) if avg_close_time else 0  # Convert seconds to days
-    
+    conn = get_db()
+    issues = conn.execute('SELECT * FROM issues ORDER BY created_at DESC').fetchall()
     conn.close()
-    return render_template('dashboard.html', issues=issues, type_data=json.dumps(type_data),
-                         status_data=json.dumps(status_data), daily_trend=json.dumps(daily_trend),
-                         daily_limit=daily_limit, avg_close_time=avg_close_time)
+    return render_template('dashboard.html', issues=issues)
 
-# Update issue status
-@app.route('/admin/update_status/<int:id>', methods=['POST'])
-def update_status(id):
-    if not session.get('admin'):
-        return redirect(url_for('admin_login'))
+@app.route('/admin/logout')
+def logout():
+    session.pop('logged_in', None)
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('admin'))
+
+@app.route('/admin/update_status/<int:issue_id>', methods=['POST'])
+def update_status(issue_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('admin'))
+    
     status = request.form['status']
-    conn = sqlite3.connect('lagnaone_issues.db')
-    c = conn.cursor()
-    c.execute("UPDATE issues SET status = ? WHERE id = ?", (status, id))
+    conn = get_db()
+    conn.execute('UPDATE issues SET status = ? WHERE id = ?', (status, issue_id))
     conn.commit()
     conn.close()
-    flash('Status updated successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
+    flash(f'Issue #{issue_id} status updated to {status}.', 'success')
+    return redirect(url_for('admin'))
 
-# Update daily limit
-@app.route('/admin/update_limit', methods=['POST'])
-def update_limit():
-    if not session.get('admin'):
-        return redirect(url_for('admin_login'))
-    new_limit = request.form['daily_limit']
-    conn = sqlite3.connect('lagnaone_issues.db')
-    c = conn.cursor()
-    c.execute("UPDATE admin_config SET value = ? WHERE key = 'daily_limit'", (new_limit,))
+@app.route('/admin/delete_issue/<int:issue_id>', methods=['POST'])
+def delete_issue(issue_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('admin'))
+
+    conn = get_db()
+    # First, get the screenshot filename to delete the file
+    issue = conn.execute('SELECT screenshot FROM issues WHERE id = ?', (issue_id,)).fetchone()
+    if issue and issue['screenshot']:
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], issue['screenshot']))
+        except OSError as e:
+            print(f"Error deleting file {issue['screenshot']}: {e.strerror}")
+
+    # Then, delete the database record
+    conn.execute('DELETE FROM issues WHERE id = ?', (issue_id,))
     conn.commit()
     conn.close()
-    flash('Daily limit updated successfully!', 'success')
-    return redirect(url_for('admin_dashboard'))
+    flash(f'Issue #{issue_id} has been deleted.', 'success')
+    return redirect(url_for('admin'))
 
-# Serve screenshots
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    if not session.get('admin'):
-        return redirect(url_for('admin_login'))
+    """Serves uploaded files."""
+    if not session.get('logged_in'):
+        return "Access denied", 403
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+# Command to initialize the database
+@app.cli.command('initdb')
+def initdb_command():
+    """Creates the database tables."""
+    init_db()
+    print('Initialized the database.')
+
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
