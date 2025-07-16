@@ -88,13 +88,13 @@
             </thead>
             <tbody>
                 {% for issue in issues %}
-                <td>
-                  {% if issue[5] %}
-                  <a href="{{ url_for('uploaded_file', filename=issue[5]) }}" target="_blank">View</a>
-                  {% else %}
-                  None
-                  {% endif %}
-                </td>
+                <tr>
+                    <td>{{ issue[0] }}</td>
+                    <td>{{ issue[1] }}</td>
+                    <td>{{ issue[2] }}</td>
+                    <td>{{ issue[3] }}</td>
+                    <td>{{ issue[4] }}</td>
+                    <td>
                         {% if issue[5] %}
                         <a href="{{ url_for('uploaded_file', filename=issue[5].split('/')[-1]) }}" target="_blank">View</a>
                         {% else %}

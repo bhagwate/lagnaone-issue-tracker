@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 import random
 import json
 
-app =Flask(__name__)
+app = Flask(__name__)
 app.secret_key = 'lagnaone_secret_key'  # Replace with a secure key in production
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max file size
@@ -94,28 +94,22 @@ def submit_issue():
             flash('Invalid CAPTCHA answer.', 'error')
             return redirect(url_for('submit_issue'))
 
-        # --- MODIFICATION START ---
-        screenshot_filename = None  # Initialize as None
+        screenshot = None
         if 'screenshot' in request.files:
             file = request.files['screenshot']
             if file and file.filename:
                 filename = secure_filename(file.filename)
                 if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    # Save the file to the uploads folder
-                    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    file.save(save_path)
-                    # Store only the filename in the database
-                    screenshot_filename = filename
+                    screenshot = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(screenshot)
                 else:
                     flash('Invalid file format. Only PNG, JPG, JPEG allowed.', 'error')
                     return redirect(url_for('submit_issue'))
 
         conn = sqlite3.connect('lagnaone_issues.db')
         c = conn.cursor()
-        # Use screenshot_filename instead of the full path
         c.execute("INSERT INTO issues (name, email, type, details, screenshot, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                  (name, email, issue_type, details, screenshot_filename, datetime.now(IST)))
-        # --- MODIFICATION END ---
+                  (name, email, issue_type, details, screenshot, datetime.now(IST)))
         c.execute("UPDATE daily_limit SET count = count + 1 WHERE date = ?", (get_ist_date(),))
         conn.commit()
         conn.close()
@@ -212,6 +206,4 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
